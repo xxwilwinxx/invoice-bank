@@ -6,7 +6,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Paste your MongoDB connection string here:
-const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://xxwilwinxx_db_user:sWt89pFX4hyN6Fe4@novus.sz5nwyg.mongodb.net/invoiceDB?retryWrites=true&w=majority';
+const MONGO_URI = process.env.MONGO_URI;
 
 // Connect to MongoDB Cloud
 mongoose.connect(MONGO_URI)
