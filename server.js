@@ -2,22 +2,25 @@ const express = require('express');
 const mongoose = require('mongoose');
 const path = require('path');
 const multer = require('multer');
-const upload = multer({ storage: multer.memoryStorage() });
+
 const app = express();
 const PORT = process.env.PORT || 3000;
+const upload = multer({ storage: multer.memoryStorage() });
 
-// Paste your MongoDB connection string here:
+// MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI;
 
-// Connect to MongoDB Cloud
 mongoose.connect(MONGO_URI)
   .then(() => console.log('Connected to MongoDB Cloud Database!'))
   .catch(err => console.error('MongoDB connection error:', err));
 
-// Define Invoice Schema
+// Schema with all active fields
 const invoiceSchema = new mongoose.Schema({
+  client: String,
+  amount: Number,
+  date: String,
+  fileName: String,
   year: String,
-  filename: String,
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -26,7 +29,7 @@ const Invoice = mongoose.model('Invoice', invoiceSchema);
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Get all invoices
+// Fetch all saved invoices
 app.get('/api/invoices', async (req, res) => {
   try {
     const invoices = await Invoice.find().sort({ createdAt: -1 });
@@ -35,6 +38,29 @@ app.get('/api/invoices', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch invoices' });
   }
 });
+
+// Save a new invoice to MongoDB
+app.post('/api/invoices', async (req, res) => {
+  try {
+    const { client, amount, date, fileName } = req.body;
+    const year = date ? date.split('-')[0] : new Date().getFullYear().toString();
+
+    const newInvoice = new Invoice({
+      client,
+      amount: parseFloat(amount) || 0,
+      date,
+      fileName,
+      year
+    });
+
+    await newInvoice.save();
+    res.status(201).json(newInvoice);
+  } catch (err) {
+    console.error('Save error:', err);
+    res.status(500).json({ error: 'Failed to save invoice' });
+  }
+});
+
 // OCR Extraction Route
 app.post('/api/extract-invoice', upload.single('invoice'), async (req, res) => {
   try {
@@ -65,17 +91,6 @@ app.post('/api/extract-invoice', upload.single('invoice'), async (req, res) => {
   } catch (err) {
     console.error('OCR Extraction Error:', err);
     res.status(500).json({ error: 'Failed to read invoice file' });
-  }
-});
-// Add a new invoice
-app.post('/api/invoices', async (req, res) => {
-  try {
-    const { year, filename } = req.body;
-    const newInvoice = new Invoice({ year, filename });
-    await newInvoice.save();
-    res.status(201).json(newInvoice);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to save invoice' });
   }
 });
 
