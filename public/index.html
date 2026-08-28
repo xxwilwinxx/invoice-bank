@@ -18,6 +18,7 @@
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
         th { background: #f8f9fa; }
+        .preview-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd; }
     </style>
 </head>
 <body>
@@ -59,6 +60,7 @@
     <table>
         <thead>
             <tr>
+                <th>Image</th>
                 <th>Date</th>
                 <th>Client</th>
                 <th>Amount</th>
@@ -105,19 +107,15 @@
                 return;
             }
 
-            // Auto-fill values extracted from OCR
             if (data.amount) document.getElementById('amount').value = data.amount;
             if (data.date) {
-                // Format extracted date string to YYYY-MM-DD for HTML date input
                 const parsedDate = new Date(data.date);
                 if (!isNaN(parsedDate)) {
                     document.getElementById('date').value = parsedDate.toISOString().split('T')[0];
                 }
             }
             
-            // Set File Reference to the original filename uploaded
             document.getElementById('fileName').value = fileInput.files[0].name;
-
             status.innerText = 'Done! Review details below.';
         } catch (err) {
             console.error(err);
@@ -130,19 +128,30 @@
         const amount = document.getElementById('amount').value;
         const date = document.getElementById('date').value;
         const fileName = document.getElementById('fileName').value;
+        const fileInput = document.getElementById('invoiceFile');
 
         if (!client || !amount || !date) return alert('Please complete client, amount, and date.');
 
+        const formData = new FormData();
+        formData.append('client', client);
+        formData.append('amount', amount);
+        formData.append('date', date);
+        formData.append('fileName', fileName);
+        
+        if (fileInput.files[0]) {
+            formData.append('invoice', fileInput.files[0]);
+        }
+
         await fetch('/api/invoices', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ client, amount, date, fileName })
+            body: formData
         });
 
         document.getElementById('client').value = '';
         document.getElementById('amount').value = '';
         document.getElementById('date').value = '';
         document.getElementById('fileName').value = '';
+        document.getElementById('invoiceFile').value = '';
         document.getElementById('scanStatus').innerText = '';
 
         fetchInvoices();
@@ -161,8 +170,13 @@
         });
 
         filtered.forEach(inv => {
+            const imageCell = inv.imageUrl 
+                ? `<a href="${inv.imageUrl}" target="_blank"><img src="${inv.imageUrl}" class="preview-thumb"></a>` 
+                : '<span>No Image</span>';
+
             tbody.innerHTML += `
                 <tr>
+                    <td>${imageCell}</td>
                     <td>${inv.date || ''}</td>
                     <td><strong>${inv.client || ''}</strong></td>
                     <td>$${inv.amount || 0}</td>
@@ -175,6 +189,9 @@
 
     fetchInvoices();
 </script>
+
+</body>
+</html>
 
 </body>
 </html>
