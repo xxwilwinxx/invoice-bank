@@ -53,7 +53,7 @@ app.get('/api/invoices', async (req, res) => {
 });
 
 // Save a new invoice with file data to MongoDB
-app.post('/api/invoices', upload.single('invoiceFile'), async (req, res) => {
+app.post('/api/invoices', upload.single('invoice'), async (req, res) => {
   try {
     const { client, amount, date, fileName } = req.body;
     const year = date ? date.split('-')[0] : new Date().getFullYear().toString();
@@ -80,7 +80,7 @@ app.post('/api/invoices', upload.single('invoiceFile'), async (req, res) => {
   }
 });
 
-// Route to click and view the specific uploaded file
+// Route to view the specific uploaded file
 app.get('/api/invoices/:id/file', async (req, res) => {
   try {
     const invoice = await Invoice.findById(req.params.id);
