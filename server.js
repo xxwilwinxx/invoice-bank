@@ -8,12 +8,15 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Password Protection Middleware
+// Global Password Protection for the Entire Site
 const authMiddleware = basicAuth({
-    users: { 'admin': 'your_secure_password' }, // Change these credentials as needed
+    users: { 'admin': 'your_secure_password' }, // Change username and password here
     challenge: true,
     realm: 'InvoiceBankProtected'
 });
+
+// Apply protection to everything below this line
+app.use(authMiddleware);
 
 // MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI;
@@ -69,8 +72,8 @@ app.post('/api/invoices', async (req, res) => {
   }
 });
 
-// Protected File/Invoice Viewer Route
-app.get('/files', authMiddleware, async (req, res) => {
+// File/Invoice Viewer Route
+app.get('/files', async (req, res) => {
   try {
     const invoices = await Invoice.find().sort({ createdAt: -1 });
     const rows = invoices.map(inv => `
