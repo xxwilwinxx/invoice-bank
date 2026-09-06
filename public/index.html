@@ -13,6 +13,8 @@
         input, button { padding: 10px; font-size: 16px; width: 100%; box-sizing: border-box; margin-top: 5px; }
         button { background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
         button:hover { background: #218838; }
+        .btn-ocr { background: #007bff; margin-bottom: 15px; }
+        .btn-ocr:hover { background: #0056b3; }
         .link-files { display: inline-block; margin-top: 20px; color: #007bff; text-decoration: none; font-weight: bold; }
         .link-files:hover { text-decoration: underline; }
     </style>
@@ -20,11 +22,14 @@
 <body>
     <div class="container">
         <h2>Invoice Bank Storage System</h2>
+        
+        <div class="form-group">
+            <label for="invoiceFile">Choose File</label>
+            <input type="file" id="invoiceFile" name="invoice">
+        </div>
+        <button type="button" id="autoFillBtn" class="btn-ocr">⚡ Auto-Fill from File</button>
+
         <form id="invoiceForm">
-            <div class="form-group">
-                <label for="invoiceFile">Choose File</label>
-                <input type="file" id="invoiceFile" name="invoice" required>
-            </div>
             <div class="form-group">
                 <label for="client">Client Name</label>
                 <input type="text" id="client" name="client" placeholder="Client Name" required>
@@ -47,11 +52,49 @@
     </div>
 
     <script>
+        document.getElementById('autoFillBtn').addEventListener('click', async () => {
+            const fileInput = document.getElementById('invoiceFile');
+            if (!fileInput.files[0]) {
+                alert('Please choose a file first before clicking Auto-Fill.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('invoice', fileInput.files[0]);
+
+            document.getElementById('autoFillBtn').innerText = 'Scanning...';
+
+            try {
+                const response = await fetch('/api/extract-invoice', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (response.ok) {
+                    if (data.amount) document.getElementById('amount').value = data.amount;
+                    if (data.date) document.getElementById('date').value = data.date;
+                    document.getElementById('fileName').value = fileInput.files[0].name;
+                    alert('Scan complete!');
+                } else {
+                    alert('Scan failed: ' + (data.error || 'Unknown error'));
+                }
+            } catch (err) {
+                console.error('OCR Error:', err);
+                alert('Failed to connect to scanner API.');
+            } finally {
+                document.getElementById('autoFillBtn').innerText = '⚡ Auto-Fill from File';
+            }
+        });
+
         document.getElementById('invoiceForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
+            const fileInput = document.getElementById('invoiceFile');
             const formData = new FormData();
-            formData.append('invoice', document.getElementById('invoiceFile').files[0]);
+            if (fileInput.files[0]) {
+                formData.append('invoice', fileInput.files[0]);
+            }
             formData.append('client', document.getElementById('client').value);
             formData.append('amount', document.getElementById('amount').value);
             formData.append('date', document.getElementById('date').value);
