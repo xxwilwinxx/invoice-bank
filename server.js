@@ -6,16 +6,15 @@ const basicAuth = require('express-basic-auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 // Global Password Protection for the Entire Site
 const authMiddleware = basicAuth({
-    users: { 'admin': 'your_secure_password' }, // Change username and password here
+    users: { 'admin': 'your_secure_password' },
     challenge: true,
     realm: 'InvoiceBankProtected'
 });
 
-// Apply protection to everything below this line
 app.use(authMiddleware);
 
 // MongoDB Connection
@@ -25,45 +24,54 @@ mongoose.connect(MONGO_URI)
   .then(() => console.log('Connected to MongoDB Cloud Database!'))
   .catch(err => console.error('MongoDB connection error:', err));
 
-// Schema with all active fields
+// Schema to store binary file data and content type
 const invoiceSchema = new mongoose.Schema({
   client: String,
   amount: Number,
   date: String,
   fileName: String,
+  fileData: Buffer,
+  fileContentType: String,
   year: String,
   createdAt: { type: Date, default: Date.now }
 });
 
 const Invoice = mongoose.model('Invoice', invoiceSchema);
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Fetch all saved invoices
+// Fetch all saved invoices (excluding heavy binary data for the dashboard)
 app.get('/api/invoices', async (req, res) => {
   try {
-    const invoices = await Invoice.find().sort({ createdAt: -1 });
+    const invoices = await Invoice.find().select('-fileData').sort({ createdAt: -1 });
     res.json(invoices);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch invoices' });
   }
 });
 
-// Save a new invoice to MongoDB
-app.post('/api/invoices', async (req, res) => {
+// Save a new invoice with file data to MongoDB
+app.post('/api/invoices', upload.single('invoiceFile'), async (req, res) => {
   try {
     const { client, amount, date, fileName } = req.body;
     const year = date ? date.split('-')[0] : new Date().getFullYear().toString();
 
-    const newInvoice = new Invoice({
+    const newInvoiceData = {
       client,
       amount: parseFloat(amount) || 0,
       date,
-      fileName,
+      fileName: req.file ? req.file.originalname : (fileName || 'Unknown'),
       year
-    });
+    };
 
+    if (req.file) {
+      newInvoiceData.fileData = req.file.buffer;
+      newInvoiceData.fileContentType = req.file.mimetype;
+    }
+
+    const newInvoice = new Invoice(newInvoiceData);
     await newInvoice.save();
     res.status(201).json(newInvoice);
   } catch (err) {
@@ -72,10 +80,26 @@ app.post('/api/invoices', async (req, res) => {
   }
 });
 
-// File/Invoice Viewer Route
+// Route to click and view the specific uploaded file
+app.get('/api/invoices/:id/file', async (req, res) => {
+  try {
+    const invoice = await Invoice.findById(req.params.id);
+    if (!invoice || !invoice.fileData) {
+      return res.status(404).send('File not found');
+    }
+
+    res.setHeader('Content-Type', invoice.fileContentType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `inline; filename="${invoice.fileName || 'invoice'}"`);
+    res.send(invoice.fileData);
+  } catch (err) {
+    res.status(500).send('Error retrieving file');
+  }
+});
+
+// File/Invoice Viewer HTML Route with clickable view links
 app.get('/files', async (req, res) => {
   try {
-    const invoices = await Invoice.find().sort({ createdAt: -1 });
+    const invoices = await Invoice.find().select('-fileData').sort({ createdAt: -1 });
     const rows = invoices.map(inv => `
       <tr>
         <td>${inv.client || 'N/A'}</td>
@@ -83,6 +107,7 @@ app.get('/files', async (req, res) => {
         <td>${inv.date || 'N/A'}</td>
         <td>${inv.fileName || 'N/A'}</td>
         <td>${new Date(inv.createdAt).toLocaleDateString()}</td>
+        <td><a href="/api/invoices/${inv._id}/file" target="_blank">View File</a></td>
       </tr>
     `).join('');
 
@@ -97,7 +122,9 @@ app.get('/files', async (req, res) => {
             th, td { padding: 12px; border: 1px solid #ddd; text-align: left; }
             th { background-color: #007bff; color: white; }
             tr:nth-child(even) { background-color: #f9f9f9; }
-            a { display: inline-block; margin-top: 20px; text-decoration: none; color: #007bff; font-weight: bold; }
+            a.back { display: inline-block; margin-top: 20px; text-decoration: none; color: #007bff; font-weight: bold; }
+            a { color: #007bff; text-decoration: none; font-weight: bold; }
+            a:hover { text-decoration: underline; }
           </style>
         </head>
         <body>
@@ -110,13 +137,14 @@ app.get('/files', async (req, res) => {
                 <th>Date</th>
                 <th>File Name</th>
                 <th>Uploaded At</th>
+                <th>Action</th>
               </tr>
             </thead>
             <tbody>
-              ${rows || '<tr><td colspan="5" style="text-align:center;">No records found</td></tr>'}
+              ${rows || '<tr><td colspan="6" style="text-align:center;">No records found</td></tr>'}
             </tbody>
           </table>
-          <a href="/">← Back to Dashboard</a>
+          <a class="back" href="/">← Back to Dashboard</a>
         </body>
       </html>
     `);
