@@ -8,7 +8,6 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
-// Global Password Protection for the Entire Site
 const authMiddleware = basicAuth({
     users: { 'admin': 'your_secure_password' },
     challenge: true,
@@ -17,14 +16,12 @@ const authMiddleware = basicAuth({
 
 app.use(authMiddleware);
 
-// MongoDB Connection
 const MONGO_URI = process.env.MONGO_URI;
 
 mongoose.connect(MONGO_URI)
   .then(() => console.log('Connected to MongoDB Cloud Database!'))
   .catch(err => console.error('MongoDB connection error:', err));
 
-// Schema to store binary file data and content type
 const invoiceSchema = new mongoose.Schema({
   client: String,
   amount: Number,
@@ -42,7 +39,6 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Fetch all saved invoices (excluding heavy binary data for the dashboard)
 app.get('/api/invoices', async (req, res) => {
   try {
     const invoices = await Invoice.find().select('-fileData').sort({ createdAt: -1 });
@@ -52,26 +48,35 @@ app.get('/api/invoices', async (req, res) => {
   }
 });
 
-// Save a new invoice with file data to MongoDB
 app.post('/api/invoices', upload.single('invoice'), async (req, res) => {
   try {
-    const { client, amount, date, fileName } = req.body;
+    const { client, amount, date, fileName, fileBase64, fileContentType } = req.body;
     const year = date ? date.split('-')[0] : new Date().getFullYear().toString();
 
-    const newInvoiceData = {
+    let binaryData = null;
+    let contentType = 'application/octet-stream';
+    let name = fileName || 'Unknown';
+
+    if (req.file) {
+      binaryData = req.file.buffer;
+      contentType = req.file.mimetype;
+      name = req.file.originalname;
+    } else if (fileBase64) {
+      const base64Data = fileBase64.replace(/^data:.*;base64,/, '');
+      binaryData = Buffer.from(base64Data, 'base64');
+      if (fileContentType) contentType = fileContentType;
+    }
+
+    const newInvoice = new Invoice({
       client,
       amount: parseFloat(amount) || 0,
       date,
-      fileName: req.file ? req.file.originalname : (fileName || 'Unknown'),
+      fileName: name,
+      fileData: binaryData,
+      fileContentType: contentType,
       year
-    };
+    });
 
-    if (req.file) {
-      newInvoiceData.fileData = req.file.buffer;
-      newInvoiceData.fileContentType = req.file.mimetype;
-    }
-
-    const newInvoice = new Invoice(newInvoiceData);
     await newInvoice.save();
     res.status(201).json(newInvoice);
   } catch (err) {
@@ -80,7 +85,6 @@ app.post('/api/invoices', upload.single('invoice'), async (req, res) => {
   }
 });
 
-// Route to view the specific uploaded file
 app.get('/api/invoices/:id/file', async (req, res) => {
   try {
     const invoice = await Invoice.findById(req.params.id);
@@ -96,7 +100,6 @@ app.get('/api/invoices/:id/file', async (req, res) => {
   }
 });
 
-// File/Invoice Viewer HTML Route with clickable view links
 app.get('/files', async (req, res) => {
   try {
     const invoices = await Invoice.find().select('-fileData').sort({ createdAt: -1 });
@@ -153,7 +156,6 @@ app.get('/files', async (req, res) => {
   }
 });
 
-// OCR Extraction Route
 app.post('/api/extract-invoice', upload.single('invoice'), async (req, res) => {
   try {
     if (!req.file) {
