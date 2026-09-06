@@ -2,179 +2,78 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Invoice Bank & Vault</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice Bank Storage System</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 30px; background: #f0f2f5; }
-        .container { max-width: 900px; margin: auto; background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-        .controls { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-        .ocr-box { display: flex; gap: 10px; align-items: center; background: #e8f4fd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px dashed #0070f3; }
-        input, select, button { padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 14px; }
-        input[type="text"], input[type="number"], input[type="date"] { flex: 1; }
-        button { background: #28a745; color: white; border: none; cursor: pointer; font-weight: bold; }
+        body { font-family: Arial, sans-serif; margin: 40px; background: #f4f4f9; color: #333; }
+        .container { max-width: 800px; margin: auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        h2 { color: #222; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, button { padding: 10px; font-size: 16px; width: 100%; box-sizing: border-box; margin-top: 5px; }
+        button { background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
         button:hover { background: #218838; }
-        .scan-btn { background: #0070f3; }
-        .scan-btn:hover { background: #0051a8; }
-        .filter-bar { display: flex; gap: 10px; background: #e9ecef; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background: #f8f9fa; }
+        .link-files { display: inline-block; margin-top: 20px; color: #007bff; text-decoration: none; font-weight: bold; }
+        .link-files:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
-
-<div class="container">
-    <h2>Invoice Bank Storage System</h2>
-
-    <!-- Auto-Fill via Document Upload -->
-    <div class="ocr-box">
-        <input type="file" id="invoiceFile" accept="image/*,application/pdf">
-        <button class="scan-btn" type="button" onclick="scanInvoice()">⚡ Auto-Fill from File</button>
-        <span id="scanStatus" style="font-size: 13px; color: #555;"></span>
+    <div class="container">
+        <h2>Invoice Bank Storage System</h2>
+        <form id="invoiceForm">
+            <div class="form-group">
+                <label for="invoiceFile">Choose File</label>
+                <input type="file" id="invoiceFile" name="invoice" required>
+            </div>
+            <div class="form-group">
+                <label for="client">Client Name</label>
+                <input type="text" id="client" name="client" placeholder="Client Name" required>
+            </div>
+            <div class="form-group">
+                <label for="amount">Amount ($)</label>
+                <input type="number" step="0.01" id="amount" name="amount" placeholder="0.00" required>
+            </div>
+            <div class="form-group">
+                <label for="date">Date</label>
+                <input type="date" id="date" name="date" required>
+            </div>
+            <div class="form-group">
+                <label for="fileName">File Reference / Name</label>
+                <input type="text" id="fileName" name="fileName" placeholder="File Reference">
+            </div>
+            <button type="submit">+ Save Invoice</button>
+        </form>
+        <a class="link-files" href="/files">→ View All Uploaded Invoices & Files</a>
     </div>
 
-    <!-- Add New Invoice -->
-    <div class="controls">
-        <input type="text" id="client" placeholder="Client Name">
-        <input type="number" id="amount" placeholder="Amount ($)" step="0.01">
-        <input type="date" id="date">
-        <input type="text" id="fileName" placeholder="File Reference / Name">
-        <button onclick="addInvoice()">+ Save Invoice</button>
-    </div>
-
-    <hr>
-
-    <!-- Search & Filter -->
-    <h3>Stored Invoices</h3>
-    <div class="filter-bar">
-        <input type="text" id="searchInput" onkeyup="renderInvoices()" placeholder="Search client name...">
-        <select id="yearFilter" onchange="renderInvoices()">
-            <option value="ALL">All Years</option>
-            <option value="2026">2026</option>
-            <option value="2025">2025</option>
-            <option value="2024">2024</option>
-        </select>
-    </div>
-
-    <!-- Table -->
-    <table>
-        <thead>
-            <tr>
-                <th>Date</th>
-                <th>Client</th>
-                <th>Amount</th>
-                <th>File Reference</th>
-                <th>Year</th>
-            </tr>
-        </thead>
-        <tbody id="invoiceTable"></tbody>
-    </table>
-</div>
-
-<script>
-    let allInvoices = [];
-
-    async function fetchInvoices() {
-        const res = await fetch('/api/invoices');
-        allInvoices = await res.json();
-        renderInvoices();
-    }
-
-    async function scanInvoice() {
-        const fileInput = document.getElementById('invoiceFile');
-        const status = document.getElementById('scanStatus');
-
-        if (!fileInput.files[0]) {
-            return alert('Please select an image or PDF file first!');
-        }
-
-        status.innerText = 'Scanning document...';
-
-        const formData = new FormData();
-        formData.append('invoice', fileInput.files[0]);
-
-        try {
-            const res = await fetch('/api/extract-invoice', {
-                method: 'POST',
-                body: formData
-            });
-
-            const data = await res.json();
-
-            if (data.error) {
-                status.innerText = 'Extraction failed. Enter values manually.';
-                return;
-            }
-
-            // Auto-fill values extracted from OCR
-            if (data.amount) document.getElementById('amount').value = data.amount;
-            if (data.date) {
-                // Format extracted date string to YYYY-MM-DD for HTML date input
-                const parsedDate = new Date(data.date);
-                if (!isNaN(parsedDate)) {
-                    document.getElementById('date').value = parsedDate.toISOString().split('T')[0];
-                }
-            }
+    <script>
+        document.getElementById('invoiceForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
             
-            // Set File Reference to the original filename uploaded
-            document.getElementById('fileName').value = fileInput.files[0].name;
+            const formData = new FormData();
+            formData.append('invoice', document.getElementById('invoiceFile').files[0]);
+            formData.append('client', document.getElementById('client').value);
+            formData.append('amount', document.getElementById('amount').value);
+            formData.append('date', document.getElementById('date').value);
+            formData.append('fileName', document.getElementById('fileName').value);
 
-            status.innerText = 'Done! Review details below.';
-        } catch (err) {
-            console.error(err);
-            status.innerText = 'Error reading document.';
-        }
-    }
+            try {
+                const response = await fetch('/api/invoices', {
+                    method: 'POST',
+                    body: formData
+                });
 
-    async function addInvoice() {
-        const client = document.getElementById('client').value;
-        const amount = document.getElementById('amount').value;
-        const date = document.getElementById('date').value;
-        const fileName = document.getElementById('fileName').value;
-
-        if (!client || !amount || !date) return alert('Please complete client, amount, and date.');
-
-        await fetch('/api/invoices', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ client, amount, date, fileName })
+                if (response.ok) {
+                    alert('Invoice saved successfully!');
+                    window.location.href = '/files';
+                } else {
+                    alert('Failed to save invoice.');
+                }
+            } catch (err) {
+                console.error('Error:', err);
+                alert('An error occurred while saving.');
+            }
         });
-
-        document.getElementById('client').value = '';
-        document.getElementById('amount').value = '';
-        document.getElementById('date').value = '';
-        document.getElementById('fileName').value = '';
-        document.getElementById('scanStatus').innerText = '';
-
-        fetchInvoices();
-    }
-
-    function renderInvoices() {
-        const search = document.getElementById('searchInput').value.toLowerCase();
-        const year = document.getElementById('yearFilter').value;
-        const tbody = document.getElementById('invoiceTable');
-        tbody.innerHTML = '';
-
-        const filtered = allInvoices.filter(inv => {
-            const matchesSearch = inv.client ? inv.client.toLowerCase().includes(search) : false;
-            const matchesYear = year === 'ALL' || inv.year === year;
-            return matchesSearch && matchesYear;
-        });
-
-        filtered.forEach(inv => {
-            tbody.innerHTML += `
-                <tr>
-                    <td>${inv.date || ''}</td>
-                    <td><strong>${inv.client || ''}</strong></td>
-                    <td>$${inv.amount || 0}</td>
-                    <td>📁 ${inv.fileName || ''}</td>
-                    <td>${inv.year || ''}</td>
-                </tr>
-            `;
-        });
-    }
-
-    fetchInvoices();
-</script>
-
+    </script>
 </body>
 </html>
