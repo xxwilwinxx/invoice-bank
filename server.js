@@ -110,11 +110,14 @@ app.get('/files', async (req, res) => {
         <td>${inv.date || 'N/A'}</td>
         <td>${inv.fileName || 'N/A'}</td>
         <td>${new Date(inv.createdAt).toLocaleDateString()}</td>
-        <td><a href="/api/invoices/${inv._id}/file" target="_blank">View File</a></td>
+        <td>
+          <a href="/api/invoices/${inv._id}/file" target="_blank">View</a> | 
+          <a href="/files/delete/${inv._id}" style="color: red;" onclick="return confirm('Are you sure you want to delete this invoice?');">Delete</a>
+        </td>
       </tr>
     `).join('');
 
-    res.send(`
+    res.send(`<!DOCTYPE html>
       <html>
         <head>
           <title>Invoice Bank - File Viewer</title>
@@ -156,6 +159,16 @@ app.get('/files', async (req, res) => {
   }
 });
 
+app.get('/files/delete/:id', async (req, res) => {
+  try {
+    await Invoice.findByIdAndDelete(req.params.id);
+    res.redirect('/files');
+  } catch (err) {
+    console.error('Delete error:', err);
+    res.status(500).send('Failed to delete invoice');
+  }
+});
+
 app.post('/api/extract-invoice', upload.single('invoice'), async (req, res) => {
   try {
     if (!req.file) {
@@ -190,4 +203,4 @@ app.post('/api/extract-invoice', upload.single('invoice'), async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-});
+});  
